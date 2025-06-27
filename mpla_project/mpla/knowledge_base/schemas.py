@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, List, Union
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship, JSON, Column
+from pydantic import BaseModel
 
 class BaseMPLAModel(SQLModel):
     """Base model for all MPLA data entities, providing common fields."""
@@ -19,6 +20,11 @@ class MetaPrompt(BaseMPLAModel, table=True):
     description: Optional[str] = Field(default=None, description="Detailed description of the meta-prompt.")
     version: int = Field(default=1, description="Version number of the meta-prompt.")
     is_active: bool = Field(default=True, description="Indicates if this is the currently active meta-prompt for its role.")
+
+class MetaPromptUpdate(BaseModel):
+    """Payload for updating a meta-prompt."""
+    template: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class OriginalPrompt(BaseMPLAModel, table=True):
     """Represents the initial prompt provided by the user."""

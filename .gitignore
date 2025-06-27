@@ -36,4 +36,20 @@ webapp/dist/
 Ai_Agents/session_summary.json
 
 # Log files
-*.log 
+*.log
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Production artifacts
+/data/
+/logs/
+docker-compose.override.yml
+
+# Deployment
+.endgame-cache/
+deployment-*.log

@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional, AsyncGenerator
 import uuid
 from datetime import datetime, timezone # Ensure timezone is imported
+import asyncio
 
 from mpla.utils.logging import logger
 from mpla.knowledge_base.schemas import (
@@ -22,6 +23,8 @@ from mpla.enhancers.architect_enhancer import ArchitectPromptEnhancer
 from mpla.config.loader import SelfCorrectionConfig
 from mpla.core.output_analyzer import OutputAnalyzer
 from mpla.core.prompt_reviser import PromptReviser
+from mpla.core.system_diagnoser import SystemDiagnoser
+import traceback
 
 class MPLAgent:
     """Manages the overall iterative refinement process for prompts.
@@ -39,6 +42,7 @@ class MPLAgent:
         evaluation_engine: EvaluationEngine,
         learning_refinement_module: LearningRefinementModule,
         reporting_module: ReportingModule,
+        system_diagnoser: SystemDiagnoser,
         self_correction_config: Optional[SelfCorrectionConfig] = None,
     ):
         self.kb = knowledge_base
@@ -47,25 +51,38 @@ class MPLAgent:
         self.evaluation_engine = evaluation_engine
         self.learning_refinement_module = learning_refinement_module
         self.reporting_module = reporting_module
+        self.system_diagnoser = system_diagnoser
         self.current_session_id: Optional[str] = None
+        self.self_correction_config = self_correction_config
 
-        # Initialize self-correction modules if configured
-        self.self_correction_enabled = (
-            self_correction_config and self_correction_config.enabled
-        )
-        if self.self_correction_enabled and self_correction_config:
+        # Self-correction modules are initialized asynchronously now
+        self.output_analyzer: Optional[OutputAnalyzer] = None
+        self.prompt_reviser: Optional[PromptReviser] = None
+
+    async def _initialize_self_correction_modules(self):
+        """Asynchronously initializes the self-correction modules if enabled."""
+        if (self.self_correction_config and self.self_correction_config.enabled):
+            logger.info("Initializing self-correction modules...")
+            
+            # Fetch meta-prompts from the database
+            analyzer_prompt_obj = await self.kb.get_active_meta_prompt("analyzer")
+            reviser_prompt_obj = await self.kb.get_active_meta_prompt("reviser")
+
+            if not analyzer_prompt_obj or not reviser_prompt_obj:
+                logger.error("Could not find active 'analyzer' or 'reviser' meta-prompts in the database. Self-correction disabled.")
+                return
+
             self.output_analyzer = OutputAnalyzer(
-                orchestrator=deployment_orchestrator,
-                temperature=self_correction_config.analysis_temperature,
+                orchestrator=self.deployment_orchestrator,
+                meta_prompt_template=analyzer_prompt_obj.template,
+                temperature=self.self_correction_config.analysis_temperature,
             )
             self.prompt_reviser = PromptReviser(
-                orchestrator=deployment_orchestrator,
-                temperature=self_correction_config.revision_temperature,
+                orchestrator=self.deployment_orchestrator,
+                meta_prompt_template=reviser_prompt_obj.template,
+                temperature=self.self_correction_config.revision_temperature,
             )
-            self.self_correction_max_iterations = self_correction_config.max_iterations
-        else:
-            self.output_analyzer = None
-            self.prompt_reviser = None
+            logger.info("Self-correction modules initialized successfully.")
 
     async def _initialize_session(self, original_prompt_text: str, user_id: Optional[str] = None) -> OriginalPrompt:
         """Initializes a new refinement session and saves the original prompt."""
@@ -187,9 +204,19 @@ class MPLAgent:
             logger.info(f"--- Starting Iteration {iteration_count} for session {self.current_session_id} ---")
 
             # 1. Enhance Prompt using the text from the previous step.
-            enhanced_prompt_text, rationale = await self.prompt_enhancer.enhance(
-                prompt_text_for_next_iteration, target_ai_profile
-            )
+            try:
+                enhanced_prompt_text, rationale = await self.prompt_enhancer.enhance(
+                    prompt_text_for_next_iteration, target_ai_profile
+                )
+            except Exception as e:
+                yield {"event": "system_error", "data": {"component": "PromptEnhancer", "error": str(e)}}
+                diagnosis = await self.system_diagnoser.diagnose_and_propose_remedy(
+                    "PromptEnhancer", e, traceback.format_exc(), {"prompt": prompt_text_for_next_iteration}
+                )
+                yield {"event": "system_diagnosis", "data": diagnosis}
+                # Basic recovery: skip iteration
+                yield {"event": "message", "data": "Skipping iteration due to unrecoverable enhancer error."}
+                continue
             
             prompt_version_data = PromptVersion(
                 original_prompt_id=original_prompt_obj.id,
@@ -201,9 +228,18 @@ class MPLAgent:
             logger.debug(f"Enhanced Prompt v{saved_prompt_version.version_number}: {saved_prompt_version.prompt_text[:100]}...")
 
             # 2. Deploy & Collect
-            ai_output = await self.deployment_orchestrator.deploy_and_collect(
-                saved_prompt_version, target_ai_profile
-            )
+            try:
+                ai_output = await self.deployment_orchestrator.deploy_and_collect(
+                    saved_prompt_version, target_ai_profile
+                )
+            except Exception as e:
+                yield {"event": "system_error", "data": {"component": "DeploymentOrchestrator", "error": str(e)}}
+                diagnosis = await self.system_diagnoser.diagnose_and_propose_remedy(
+                    "DeploymentOrchestrator", e, traceback.format_exc(), {"prompt_version_id": saved_prompt_version.id}
+                )
+                yield {"event": "system_diagnosis", "data": diagnosis}
+                yield {"event": "message", "data": "Skipping iteration due to unrecoverable deployment error."}
+                continue
             
             if not ai_output:
                 logger.error("Failed to get AI output. Stopping.")
@@ -214,9 +250,18 @@ class MPLAgent:
             logger.debug(f"AI Output collected and saved (ID: {saved_ai_output.id}): {str(saved_ai_output.raw_output_data)[:100]}...")
 
             # 3. Evaluate
-            evaluation_result = await self.evaluation_engine.evaluate(
-                saved_ai_output, initial_performance_metrics
-            )
+            try:
+                evaluation_result = await self.evaluation_engine.evaluate(
+                    saved_ai_output, initial_performance_metrics
+                )
+            except Exception as e:
+                yield {"event": "system_error", "data": {"component": "EvaluationEngine", "error": str(e)}}
+                diagnosis = await self.system_diagnoser.diagnose_and_propose_remedy(
+                    "EvaluationEngine", e, traceback.format_exc(), {"ai_output_id": saved_ai_output.id}
+                )
+                yield {"event": "system_diagnosis", "data": diagnosis}
+                yield {"event": "message", "data": "Skipping iteration due to unrecoverable evaluation error."}
+                continue
 
             if not evaluation_result:
                 logger.error("Evaluation failed. Stopping.")
@@ -257,7 +302,8 @@ class MPLAgent:
                 logger.info("--- Max iterations reached. ---")
 
         # Generate the final report after all iterations are complete.
-        return await self.reporting_module.generate_final_report(self.current_session_id) 
+        final_report = await self.reporting_module.generate_final_report(self.current_session_id)
+        yield {"event": "final_report", "data": final_report}
 
     async def stream_refinement_cycle(
         self,
@@ -274,6 +320,7 @@ class MPLAgent:
         Runs the iterative prompt refinement process and streams results after each iteration.
         """
         await self.kb.connect()
+        await self._initialize_self_correction_modules() # Initialize modules after DB connection
 
         original_prompt_obj = await self._initialize_session(original_prompt_text, user_id)
         if not original_prompt_obj.id:
@@ -288,20 +335,30 @@ class MPLAgent:
             logger.info(f"--- Starting Stream Iteration {iteration_count} for session {self.current_session_id} ---")
 
             # 1. Enhance Prompt
-            enhanced_prompt_text, rationale = await self.prompt_enhancer.enhance(
-                prompt_text_for_next_iteration, target_ai_profile
-            )
-            
+            try:
+                enhanced_prompt_text, rationale = await self.prompt_enhancer.enhance(
+                    prompt_text_for_next_iteration, target_ai_profile
+                )
+            except Exception as e:
+                yield {"event": "system_error", "data": {"component": "PromptEnhancer", "error": str(e)}}
+                diagnosis = await self.system_diagnoser.diagnose_and_propose_remedy(
+                    "PromptEnhancer", e, traceback.format_exc(), {"prompt": prompt_text_for_next_iteration}
+                )
+                yield {"event": "system_diagnosis", "data": diagnosis}
+                # Basic recovery: skip iteration
+                yield {"event": "message", "data": "Skipping iteration due to unrecoverable enhancer error."}
+                continue
+
             # --- SELF-CORRECTION HOOK ---
             final_prompt_text = enhanced_prompt_text
             if (
-                self.self_correction_enabled
-                and self_correction_enabled_by_user
+                self_correction_enabled_by_user
                 and self.output_analyzer
                 and self.prompt_reviser
+                and self.self_correction_config
             ):
                 max_correction_iters = min(
-                    self.self_correction_max_iterations, self_correction_iterations_by_user
+                    self.self_correction_config.max_iterations, self_correction_iterations_by_user
                 )
                 
                 result_holder = {}
@@ -329,9 +386,18 @@ class MPLAgent:
             logger.debug(f"Stream: Enhanced Prompt v{saved_prompt_version.version_number}: {saved_prompt_version.prompt_text[:100]}...")
 
             # 2. Deploy & Collect
-            ai_output = await self.deployment_orchestrator.deploy_and_collect(
-                saved_prompt_version, target_ai_profile
-            )
+            try:
+                ai_output = await self.deployment_orchestrator.deploy_and_collect(
+                    saved_prompt_version, target_ai_profile
+                )
+            except Exception as e:
+                yield {"event": "system_error", "data": {"component": "DeploymentOrchestrator", "error": str(e)}}
+                diagnosis = await self.system_diagnoser.diagnose_and_propose_remedy(
+                    "DeploymentOrchestrator", e, traceback.format_exc(), {"prompt_version_id": saved_prompt_version.id}
+                )
+                yield {"event": "system_diagnosis", "data": diagnosis}
+                yield {"event": "message", "data": "Skipping iteration due to unrecoverable deployment error."}
+                continue
             
             if not ai_output:
                 logger.error("Stream: Failed to get AI output. Stopping.")
@@ -342,9 +408,18 @@ class MPLAgent:
             logger.debug(f"Stream: AI Output collected and saved (ID: {saved_ai_output.id}): {str(saved_ai_output.raw_output_data)[:100]}...")
 
             # 3. Evaluate
-            evaluation_result = await self.evaluation_engine.evaluate(
-                saved_ai_output, initial_performance_metrics
-            )
+            try:
+                evaluation_result = await self.evaluation_engine.evaluate(
+                    saved_ai_output, initial_performance_metrics
+                )
+            except Exception as e:
+                yield {"event": "system_error", "data": {"component": "EvaluationEngine", "error": str(e)}}
+                diagnosis = await self.system_diagnoser.diagnose_and_propose_remedy(
+                    "EvaluationEngine", e, traceback.format_exc(), {"ai_output_id": saved_ai_output.id}
+                )
+                yield {"event": "system_diagnosis", "data": diagnosis}
+                yield {"event": "message", "data": "Skipping iteration due to unrecoverable evaluation error."}
+                continue
 
             if not evaluation_result:
                 logger.error("Stream: Evaluation failed. Stopping.")
@@ -391,4 +466,12 @@ class MPLAgent:
                         break
                     prompt_text_for_next_iteration = next_prompt_version_obj.prompt_text
             else:
-                logger.info("--- Stream: Max iterations reached. ---") 
+                logger.info("--- Stream: Max iterations reached. ---")
+
+        # --- Final Report ---
+        logger.info(f"--- Stream finished for session {self.current_session_id}. Generating final report. ---")
+        
+        # Call the reporting module to generate the final report.
+        report_data = await self.reporting_module.generate_final_report(self.current_session_id)
+        
+        yield {"event": "final_report", "data": report_data}

@@ -1,13 +1,14 @@
 import os
 import google.generativeai as genai
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from mpla.core.deployment_orchestrator import DeploymentOrchestrator
 from mpla.knowledge_base.schemas import PromptVersion, TargetAIProfile, AIOutput
+from mpla.utils.logging import logger
 
-class GoogleGeminiDeploymentOrchestrator(DeploymentOrchestrator):
+class GoogleGeminiOrchestrator(DeploymentOrchestrator):
     """
-    A deployment orchestrator for interacting with Google's Gemini models.
+    An orchestrator for interacting with Google's Gemini models.
     """
 
     def __init__(self, api_key: str | None = None):
@@ -81,7 +82,7 @@ class GoogleGeminiDeploymentOrchestrator(DeploymentOrchestrator):
                 )
 
         except Exception as e:
-            print(f"An error occurred while communicating with the Google Gemini API: {e}")
+            logger.error(f"An error occurred while communicating with the Google Gemini API: {e}")
             return AIOutput(
                 prompt_version_id=prompt_version.id if prompt_version.id is not None else -1,
                 raw_output_data={"error": "API communication error", "details": str(e)}
@@ -151,40 +152,59 @@ class GoogleGeminiDeploymentOrchestrator(DeploymentOrchestrator):
                 )
 
         except Exception as e:
-            print(f"An error occurred while communicating with the Google Gemini API: {e}")
+            logger.error(f"An error occurred while communicating with the Google Gemini API: {e}")
             return AIOutput(
                 prompt_version_id=-1,
                 raw_output_data={"error": "API communication error", "details": str(e)}
             )
 
-    async def generate_text(self, prompt: str, temperature: float) -> Optional[str]:
+    async def invoke_model(
+        self, 
+        prompt: str, 
+        temperature: float, 
+        model: str = 'gemini-1.5-flash',
+        response_format: Optional[Literal["json_object"]] = None
+    ) -> Optional[dict]:
         """
-        Generates text from a single string prompt, for internal use by modules.
+        Invokes a Gemini model with a specific prompt and settings.
 
         Args:
             prompt: The text prompt to send to the model.
             temperature: The generation temperature.
+            model: The specific model to use.
+            response_format: If 'json_object', configures the model to return JSON.
 
         Returns:
-            The generated text as a string, or None on failure.
+            The model's response as a dictionary, or None on failure.
         """
-        model_name = 'gemini-1.5-flash' # Use a default fast model
+        generation_config = genai.types.GenerationConfig(
+            temperature=float(temperature)
+        )
         
-        generation_config = genai.types.GenerationConfig(temperature=float(temperature))
+        if response_format == "json_object":
+            generation_config.response_mime_type = "application/json"
 
-        model = genai.GenerativeModel(
-            model_name=model_name,
+        genai_model = genai.GenerativeModel(
+            model_name=model,
             generation_config=generation_config
         )
         
         try:
-            response: genai.types.GenerateContentResponse = await model.generate_content_async(
+            logger.debug(f"Invoking model '{model}' with temp={temperature} and format='{response_format}'")
+            response: genai.types.GenerateContentResponse = await genai_model.generate_content_async(
                 prompt
             )
-            return response.text if response and response.text else None
+            
+            if not response or not response.text:
+                logger.warning("Model invocation returned no text content.")
+                return None
+            
+            # The 'text' attribute of the response object will be a string, 
+            # which we return directly for the caller to handle (e.g., json.loads).
+            return {"text": response.text}
+
         except Exception as e:
-            print(f"An error occurred during raw text generation: {e}")
-            # Return None to signal failure to the calling module
+            logger.error(f"An error occurred during model invocation: {e}")
             return None
 
     async def close(self):

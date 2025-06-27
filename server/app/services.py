@@ -2,7 +2,8 @@ import asyncio
 import json
 import os
 import sys
-from typing import AsyncGenerator, Dict, Any, Optional
+from typing import AsyncGenerator, Dict, Any
+from fastapi.encoders import jsonable_encoder
 from fastapi import HTTPException
 
 # Add project root to Python path
@@ -12,133 +13,134 @@ if project_root not in sys.path:
 
 # MPLA imports
 from mpla.utils.logging import setup_logging, logger
-from mpla.config.loader import load_config, Config
+from mpla.config.loader import load_config
 from mpla.agent.mpla_agent import MPLAgent
 from mpla.knowledge_base.sqlite_kb import SQLiteKnowledgeBase
-from mpla.core.prompt_enhancer import RuleBasedPromptEnhancer
-from mpla.core.llm_assisted_prompt_enhancer import LLMAssistedPromptEnhancer
-from mpla.external.openai_orchestrator import OpenAIDeploymentOrchestrator
-from mpla.external.google_gemini_orchestrator import GoogleGeminiDeploymentOrchestrator
-from mpla.core.evaluation_engine import BasicEvaluationEngine
-from mpla.core.learning_refinement import RuleBasedLearningRefinementModule
-from mpla.core.llm_assisted_learning_refinement import LLMAssistedLearningRefinementModule
-from mpla.reporting.database_reporting import DatabaseReportingModule
-from mpla.core.exceptions import ConfigurationError, MPLAError
+from mpla.external.google_gemini_orchestrator import GoogleGeminiOrchestrator
 from mpla.enhancers.architect_enhancer import ArchitectPromptEnhancer
-from mpla.knowledge_base.schemas import TargetAIProfile, IterationLog, PromptVersion
+from mpla.core.factory import create_evaluation_engine
+from mpla.core.learning_refinement import RuleBasedLearningRefinementModule
+from mpla.reporting.database_reporting import DatabaseReportingModule
+from mpla.core.system_diagnoser import SystemDiagnoser
+from mpla.knowledge_base.schemas import MetaPrompt, MetaPromptUpdate
 
 setup_logging()
 
-# The stream_refinement_cycle is now a native method of MPLAgent,
-# so the monkey-patched version is no longer needed here.
+# --- Service Setup ---
+# This setup should be more robust in a production environment (e.g., using dependency injection)
+# For now, we instantiate the components directly.
 
-# --- Functions moved from CLI ---
-def get_default_config_path() -> str:
-    """Determines the default config path, making it portable for PyInstaller."""
-    if getattr(sys, 'frozen', False):
-        base_path = os.path.dirname(sys.executable)
-    else:
-        # Adjusted path for server context
-        base_path = os.path.join(project_root, 'mpla_project', 'mpla', 'config')
-    return os.path.join(base_path, 'config.yaml')
+# Knowledge Base
+DATABASE_URL = "mpla_v2.db"
+kb = SQLiteKnowledgeBase(db_path=DATABASE_URL)
 
-def build_agent_from_config(config: Config) -> MPLAgent:
-    """Builds and returns an MPLAgent based on the provided configuration."""
-    if config.agent.knowledge_base.provider == 'sqlite':
-        kb = SQLiteKnowledgeBase(db_path=config.agent.knowledge_base.db_path)
-    else:
-        raise ValueError(f"Unsupported knowledge_base provider: {config.agent.knowledge_base.provider}")
+# Load the main application configuration using an absolute path
+config_path = os.path.join(project_root, "mpla_project", "mpla", "config", "config.yaml")
+try:
+    config = load_config(config_path)
+except FileNotFoundError:
+    logger.error(f"FATAL: Could not find config.yaml at the expected path: {config_path}")
+    # In a real app, you might have a default fallback config or a more graceful shutdown.
+    config = None 
 
-    orchestrator_config = config.agent.deployment_orchestrator
-    if orchestrator_config.provider == 'openai':
-        deployment_orchestrator = OpenAIDeploymentOrchestrator(api_key=config.api_keys.openai_api_key)
-    elif orchestrator_config.provider == 'gemini':
-        deployment_orchestrator = GoogleGeminiDeploymentOrchestrator(api_key=config.api_keys.google_api_key)
-    else:
-        raise ConfigurationError(f"Unsupported or missing deployment_orchestrator provider: {orchestrator_config.provider}")
+# --- Meta-Prompt Service Functions ---
 
-    if config.agent.prompt_enhancer.provider == 'rule_based':
-        prompt_enhancer = RuleBasedPromptEnhancer()
-    elif config.agent.prompt_enhancer.provider == 'llm_assisted':
-        if not isinstance(deployment_orchestrator, (GoogleGeminiDeploymentOrchestrator, OpenAIDeploymentOrchestrator)):
-            raise ConfigurationError("LLM-assisted enhancer requires a real LLM orchestrator (Gemini or OpenAI).")
-        prompt_enhancer = LLMAssistedPromptEnhancer(orchestrator=deployment_orchestrator)
-    elif config.agent.prompt_enhancer.provider == 'architect':
-        if not isinstance(deployment_orchestrator, (GoogleGeminiDeploymentOrchestrator, OpenAIDeploymentOrchestrator)):
-            raise ConfigurationError("Architect enhancer requires a real LLM orchestrator (Gemini or OpenAI).")
-        prompt_enhancer = ArchitectPromptEnhancer(orchestrator=deployment_orchestrator, kb=kb)
-    else:
-        raise ConfigurationError(f"Unsupported prompt_enhancer provider: {config.agent.prompt_enhancer.provider}")
+async def get_all_meta_prompts() -> list[MetaPrompt]:
+    """Service function to retrieve all meta-prompts."""
+    await kb.connect()
+    prompts = await kb.get_all(MetaPrompt)
+    await kb.disconnect()
+    return prompts
 
-    evaluation_engine = BasicEvaluationEngine()
+async def get_meta_prompt_by_name(name: str) -> MetaPrompt:
+    """Service function to retrieve a specific meta-prompt by name."""
+    await kb.connect()
+    prompt = await kb.get_meta_prompt_by_name(name)
+    await kb.disconnect()
+    if not prompt:
+        raise HTTPException(status_code=404, detail=f"Meta-prompt '{name}' not found.")
+    return prompt
 
-    if config.agent.learning_refinement_module.provider == 'rule_based':
-        learning_refinement_module = RuleBasedLearningRefinementModule()
-    elif config.agent.learning_refinement_module.provider == 'llm_assisted':
-        if not isinstance(deployment_orchestrator, (GoogleGeminiDeploymentOrchestrator, OpenAIDeploymentOrchestrator)):
-            raise ConfigurationError("LLM-assisted learning module requires a real LLM orchestrator (Gemini or OpenAI).")
-        learning_refinement_module = LLMAssistedLearningRefinementModule(orchestrator=deployment_orchestrator)
-    else:
-        raise ConfigurationError(f"Unsupported learning_refinement_module provider: {config.agent.learning_refinement_module.provider}")
+async def update_meta_prompt(name: str, payload: MetaPromptUpdate) -> MetaPrompt:
+    """Service function to update a meta-prompt."""
+    await kb.connect()
+    updated_prompt = await kb.update_meta_prompt(name, payload)
+    await kb.disconnect()
+    if not updated_prompt:
+        raise HTTPException(status_code=404, detail=f"Meta-prompt '{name}' not found or update failed.")
+    return updated_prompt
 
-    if config.agent.reporting_module.provider == 'database':
-        reporting_module = DatabaseReportingModule(kb=kb)
-    else:
-        raise ConfigurationError(f"Unsupported or missing reporting_module provider: {config.agent.reporting_module.provider}")
-
-    return MPLAgent(
-        knowledge_base=kb,
-        prompt_enhancer=prompt_enhancer,
-        deployment_orchestrator=deployment_orchestrator,
-        evaluation_engine=evaluation_engine,
-        learning_refinement_module=learning_refinement_module,
-        reporting_module=reporting_module,
-        self_correction_config=config.agent.self_correction,
-    )
-
-# --- Main Service Function ---
 async def run_mpla_refinement(
     initial_prompt: str,
     settings: Dict[str, Any]
 ) -> AsyncGenerator[str, None]:
     """
-    Sets up the MPLA agent from configuration and runs the streaming refinement cycle.
+    Sets up the MPLA agent dynamically and runs the streaming refinement cycle.
     """
-    setup_logging()
     agent = None
-    try:
-        config_path = get_default_config_path()
-        logger.info(f"Loading base configuration from: {config_path}")
-        config = load_config(config_path)
-
-        config.agent.deployment_orchestrator.provider = settings["providers"]["orchestrator"]
-        config.agent.prompt_enhancer.provider = settings["providers"]["enhancer"]
+    if not config:
+        yield json.dumps({
+            "event": "error", 
+            "data": {"message": "Server configuration is missing. Cannot start refinement."}
+        })
+        return
         
-        logger.info(f"Building agent with orchestrator: '{config.agent.deployment_orchestrator.provider}' and enhancer: '{config.agent.prompt_enhancer.provider}'")
-        agent = build_agent_from_config(config)
+    try:
+        # --- Dynamic Component Instantiation ---
+        
+        # 1. Orchestrator
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable not set.")
+        orchestrator = GoogleGeminiOrchestrator(api_key=api_key)
 
-        # Use the specific architect temperature if the architect enhancer is selected
-        if settings["providers"]["enhancer"] == 'architect':
-            temperature = settings.get("architect_temperature", 0.2)
-        else:
-            temperature = settings.get("model_temperature", 0.7)
+        # 2. Evaluation Engine (using the factory)
+        evaluation_engine = create_evaluation_engine(settings, orchestrator)
+        
+        # 3. Prompt Enhancer
+        enhancer = ArchitectPromptEnhancer(
+            orchestrator=orchestrator,
+            kb=kb
+        )
+
+        # 4. System Diagnoser (NEW)
+        system_diagnoser = SystemDiagnoser(orchestrator=orchestrator)
+
+        # --- Agent Initialization ---
+        logger.info(f"Initializing agent with enhancer='Architect', evaluation='{settings.get('evaluation_mode', 'basic')}'")
+        agent = MPLAgent(
+            knowledge_base=kb,
+            prompt_enhancer=enhancer,
+            deployment_orchestrator=orchestrator,
+            evaluation_engine=evaluation_engine,
+            learning_refinement_module=RuleBasedLearningRefinementModule(),
+            reporting_module=DatabaseReportingModule(kb=kb),
+            system_diagnoser=system_diagnoser,
+            self_correction_config=config.agent.self_correction
+        )
 
         target_ai_profile_data = {
             "name": "gemini-1.5-flash",
             "capabilities": {
-                "temperature": temperature
+                "temperature": settings.get("model_temperature", 0.7),
+                "architect_temperature": settings.get("architect_temperature", 0.2)
             }
         }
         
+        # This structure for metrics will need to adapt for the LLM evaluator
         initial_performance_metrics = {
+            # For LLM
+            "user_objective": initial_prompt,
+            "quality_dimensions": ["clarity", "relevance", "completeness", "adherence_to_constraints"],
+            # For Basic
             "target_satisfaction": 4.0,
             "rules": {
-                "length": {"min": 20, "max": 1000, "weight": 0.3, "target_score": 5.0},
-                "keywords": {"present": [], "absent": ["sorry", "unable to", "cannot"], "weight": 0.4, "target_score": 5.0, "case_sensitive": False},
+                "length": {"min": 20, "max": 2000, "weight": 0.2},
+                "keywords": {"absent": ["sorry", "unable", "cannot"], "weight": 0.3},
             }
         }
         
-        yield json.dumps({"event": "message", "data": "Agent initialized. Starting refinement..."})
+        yield {"event": "message", "data": "Agent initialized. Starting refinement..."}
 
         async for iteration_result in agent.stream_refinement_cycle(
             original_prompt_text=initial_prompt,
@@ -149,20 +151,20 @@ async def run_mpla_refinement(
             self_correction_enabled_by_user=settings.get("enable_self_correction", False),
             self_correction_iterations_by_user=settings.get("self_correction_iterations", 3),
         ):
-            yield json.dumps(iteration_result)
+            yield iteration_result
 
     except Exception as e:
         logger.critical(f"An unexpected error occurred during agent setup or execution: {e}", exc_info=True)
-        error_payload = json.dumps({
+        error_payload = {
             "event": "error", 
             "data": {
                 "message": f"Failed to run refinement: {e}"
             }
-        })
+        }
         yield error_payload
     finally:
         # This block will run whether there was an error or not.
-        final_payload = json.dumps({"event": "complete", "data": "Stream finished."})
+        final_payload = {"event": "complete", "data": "Stream finished."}
         yield final_payload
         
         if agent and agent.kb._conn is not None:

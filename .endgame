@@ -1,0 +1,31 @@
+{
+  "org": "personal",
+  "settings": {},
+  "name": "mpla-agent",
+  "version": "1.0.0",
+  "description": "Meta-Prompt Learning Agent - Autonomous system for iterative prompt refinement and improvement",
+  "runtime": "nodejs22.x",
+  "buildCommand": "npm install && cd webapp && npm install && npm run build && cd .. && pip install -r mpla_project/requirements.txt -r server/requirements.txt && cd mpla_project && pip install -e . && cd .. && npm prune --omit=dev",
+  "entrypointFile": "server/start.js",
+  "buildArtifactPath": ".",
+  "environment": {
+    "NODE_ENV": "production",
+    "PORT": "8080",
+    "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
+    "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+  },
+  "healthCheck": {
+    "path": "/api/health",
+    "intervalSeconds": 30,
+    "timeoutSeconds": 10
+  },
+  "resources": {
+    "memory": "1024Mi",
+    "cpu": "500m"
+  },
+  "scaling": {
+    "minInstances": 1,
+    "maxInstances": 3
+  },
+  "app": "mpla-agent"
+}

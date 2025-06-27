@@ -82,20 +82,23 @@ class ArchitectPromptEnhancer(BasePromptEnhancer):
             original_prompt_text
         ]
 
-        # 3. Use the orchestrator's new history-based method
+        # 3. Use the orchestrator's history-based method
         logger.debug("Sending conversation to LLM for architectural enhancement.")
         
-        # Use the specific temperature for the architect's LLM call.
-        # The user's temperature setting is preserved in the original ai_profile for the main prompt.
-        architect_ai_profile = ai_profile.model_copy(deep=True)
+        # Create a deep copy of the AI profile to avoid side effects.
+        architect_ai_profile = ai_profile.model_copy(deep=True) if ai_profile else TargetAIProfile()
+
         if architect_ai_profile.capabilities is None:
             architect_ai_profile.capabilities = {}
-        # The architect temp is now passed in via the capabilities dict
-        # No need to override it here if it's passed correctly from the service layer
 
+        # Get the specific temperature for the architect's LLM call, falling back to a default.
+        architect_temp = architect_ai_profile.capabilities.pop("architect_temperature", 0.2)
+        # Set the main temperature for this specific call.
+        architect_ai_profile.capabilities["temperature"] = architect_temp
+        
         ai_output: Optional[AIOutput] = await self.orchestrator.deploy_and_collect_from_history(
             history=history,
-            ai_profile=architect_ai_profile
+            ai_profile=architect_ai_profile # Use the modified profile
         )
 
         llm_response_text = None

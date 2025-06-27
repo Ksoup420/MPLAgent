@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SettingsPanel from './components/SettingsPanel';
 import SelfCorrectionLog from './components/SelfCorrectionLog';
+import SystemStatusLog from './components/SystemStatusLog';
+import MetaPromptManager from './components/MetaPromptManager';
 import { createParser } from 'eventsource-parser';
 import './index.css';
 
@@ -15,18 +17,24 @@ function App() {
       orchestrator: 'gemini',
       enhancer: 'architect',
     },
+    evaluation_mode: 'basic',
     enable_self_correction: false,
     self_correction_iterations: 3,
   });
   const [initialPrompt, setInitialPrompt] = useState('');
   const [results, setResults] = useState([]);
   const [selfCorrectionLog, setSelfCorrectionLog] = useState([]);
+  const [systemStatusLog, setSystemStatusLog] = useState([]);
+  const [finalReport, setFinalReport] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showPromptManager, setShowPromptManager] = useState(false);
 
   const handleRefine = async () => {
     setResults([]);
     setSelfCorrectionLog([]);
+    setSystemStatusLog([]);
+    setFinalReport(null);
     setError(null);
     setIsLoading(true);
 
@@ -57,6 +65,11 @@ function App() {
                     setResults(prev => [...prev, data]);
                 } else if (eventName.startsWith('self_correction')) {
                     setSelfCorrectionLog(prev => [...prev, { event: eventName, data }]);
+                } else if (eventName.startsWith('system_')) {
+                    setSystemStatusLog(prev => [...prev, { event: eventName, data }]);
+                } else if (eventName === 'final_report') {
+                    setFinalReport(data);
+                    setIsLoading(false);
                 } else if (eventName === 'complete') {
                     console.log("Stream complete.");
                     setIsLoading(false);
@@ -126,6 +139,18 @@ function App() {
                     {isLoading ? 'Refining...' : 'Run Refinement'}
                 </button>
             </div>
+            
+            {/* Meta-Prompt Manager (Collapsible) */}
+            <div className="bg-gray-800 p-4 rounded-lg shadow-inner">
+              <button 
+                onClick={() => setShowPromptManager(!showPromptManager)}
+                className="w-full text-left font-bold text-lg flex justify-between items-center"
+              >
+                <span>Meta-Prompt Configuration</span>
+                <span>{showPromptManager ? '▼' : '▶'}</span>
+              </button>
+              {showPromptManager && <MetaPromptManager />}
+            </div>
           </div>
 
           {/* Right Column: Results */}
@@ -134,6 +159,7 @@ function App() {
             <div className="space-y-6 overflow-y-auto h-[calc(100vh-250px)] p-2">
                 {error && <div className="text-red-400 bg-red-900/50 p-3 rounded-md">{error}</div>}
                 
+                <SystemStatusLog statusLog={systemStatusLog} />
                 <SelfCorrectionLog log={selfCorrectionLog} />
 
                 {results.map((result, index) => (
@@ -161,6 +187,17 @@ function App() {
                         </div>
                     </div>
                 ))}
+
+                {finalReport && (
+                    <div className="bg-green-800/20 border border-green-500 p-4 rounded-lg animate-fade-in">
+                        <h3 className="font-bold text-xl text-green-300">Final Report</h3>
+                        <div className="prose prose-invert mt-2 text-gray-300 max-w-none">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {finalReport.content || 'No content in report.'}
+                            </ReactMarkdown>
+                        </div>
+                    </div>
+                )}
 
                 {isLoading && results.length === 0 && <div className="text-center p-8">Waiting for refinement to start...</div>}
             </div>

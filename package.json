@@ -1,0 +1,33 @@
+{
+  "name": "ai_agents",
+  "version": "1.0.0",
+  "description": "This project implements the Meta-Prompt Learning Agent (MPLA), an autonomous system designed to iteratively refine and improve prompts for large language models.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "start": "node server/start.js",
+    "build:all": "cd webapp && npm install && npm run build && cd .. && pip install -r mpla_project/requirements.txt -r server/requirements.txt && cd mpla_project && pip install -e .",
+    "dev": "NODE_ENV=development node server/start.js",
+    "test": "playwright test",
+    "docker:build": "docker build -t mpla-agent .",
+    "docker:run": "docker-compose up",
+    "docker:prod": "docker-compose -f docker-compose.yml --profile production up"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ksoup420/MPLAgent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Ksoup420/MPLAgent/issues"
+  },
+  "homepage": "https://github.com/Ksoup420/MPLAgent#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.53.1",
+    "@types/node": "^24.0.4"
+  }
+}

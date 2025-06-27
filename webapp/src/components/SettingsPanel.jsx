@@ -143,6 +143,21 @@ const SettingsPanel = ({ settings, setSettings }) => {
             <option value="architect">Architect</option>
           </select>
         </div>
+
+        {/* Evaluation Mode */}
+        <div className="flex flex-col">
+          <label htmlFor="evaluation_mode" className="mb-2 font-semibold text-gray-300">Evaluation Mode</label>
+          <select
+            id="evaluation_mode"
+            name="evaluation_mode"
+            value={settings.evaluation_mode}
+            onChange={handleInputChange}
+            className="bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="basic">Rule-Based</option>
+            <option value="llm_assisted">LLM-Assisted</option>
+          </select>
+        </div>
       </div>
     </div>
   );
