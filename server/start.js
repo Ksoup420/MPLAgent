@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 
 const PORT = process.env.PORT || 8080;
-const PYTHON_PATH = process.env.PYTHON_PATH || 'python';
+const PYTHON_PATH = process.env.PYTHON_PATH || 'python3';
 
 console.log('🚀 Starting MPLA Meta-Prompt Learning Agent...');
 console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -52,7 +52,7 @@ const pythonProcess = spawn(PYTHON_PATH, uvicornArgs, {
     stdio: 'inherit',
     env: {
         ...process.env,
-        PYTHONPATH: path.join(__dirname, '..', 'mpla_project'),
+        PYTHONPATH: path.join(__dirname, '..', 'mpla_project') + ':' + (process.env.PYTHONPATH || ''),
         MPLA_DATA_DIR: dataDir,
         MPLA_LOGS_DIR: logsDir
     }
