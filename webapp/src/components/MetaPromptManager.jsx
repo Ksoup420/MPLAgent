@@ -7,12 +7,15 @@ const MetaPromptManager = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [promptContent, setPromptContent] = useState({});
+    
+    // Use relative URL for production, absolute for development
+    const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
 
     const fetchPrompts = async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch('http://localhost:8000/api/meta-prompts');
+            const response = await fetch(`${API_BASE}/api/meta-prompts`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -38,7 +41,7 @@ const MetaPromptManager = () => {
     const handleSave = async (name) => {
         const content = promptContent[name];
         toast.promise(
-            fetch(`http://localhost:8000/api/meta-prompts/${name}`, {
+            fetch(`${API_BASE}/api/meta-prompts/${name}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ template: content }),
@@ -63,7 +66,7 @@ const MetaPromptManager = () => {
     
     const handleSetActive = async (name) => {
         toast.promise(
-             fetch(`http://localhost:8000/api/meta-prompts/${name}`, {
+             fetch(`${API_BASE}/api/meta-prompts/${name}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: true }),

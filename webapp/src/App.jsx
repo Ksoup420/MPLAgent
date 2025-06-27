@@ -38,7 +38,9 @@ function App() {
     setError(null);
     setIsLoading(true);
 
-    const response = await fetch("http://localhost:8000/api/refine", {
+    // Use relative URL for production, absolute for development
+    const API_BASE = import.meta.env.DEV ? 'http://localhost:8000' : '';
+    const response = await fetch(`${API_BASE}/api/refine`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
