@@ -119,10 +119,10 @@ function App() {
         <h1 className="text-3xl font-bold text-center text-blue-400">MPLA Web Interface</h1>
       </header>
       <main className="p-4 md:p-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Column: Settings and Input */}
-          <div className="lg:col-span-1 flex flex-col gap-8">
+          <div className="lg:col-span-4 flex flex-col gap-8">
             <SettingsPanel settings={settings} setSettings={setSettings} />
             
             <div className="bg-gray-800 p-4 rounded-lg shadow-inner">
@@ -156,9 +156,9 @@ function App() {
           </div>
 
           {/* Right Column: Results */}
-          <div className="lg:col-span-2 bg-gray-800 p-4 rounded-lg shadow-inner min-h-[500px]">
+          <div className="lg:col-span-8 bg-gray-800 p-4 rounded-lg shadow-inner min-h-[500px]">
             <h2 className="text-xl font-bold mb-4 border-b border-gray-600 pb-2">Refinement Results</h2>
-            <div className="space-y-6 overflow-y-auto h-[calc(100vh-250px)] p-2">
+            <div className="space-y-6 overflow-y-auto max-h-[70vh] p-2">
                 {error && <div className="text-red-400 bg-red-900/50 p-3 rounded-md">{error}</div>}
                 
                 <SystemStatusLog statusLog={systemStatusLog} />

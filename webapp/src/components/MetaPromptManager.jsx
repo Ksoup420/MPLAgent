@@ -88,12 +88,13 @@ const MetaPromptManager = () => {
 
     if (isLoading) return <div className="text-center p-4">Loading prompts...</div>;
     if (error) return <div className="text-red-400 p-4">Error: {error}</div>;
+    if (!prompts || prompts.length === 0) return <div className="text-center p-4">No meta-prompts available.</div>;
 
     return (
         <div className="bg-gray-800/50 p-4 rounded-lg shadow-inner mt-4">
             <Toaster position="top-right" />
             <h2 className="text-xl font-bold mb-4">Meta-Prompt Configuration</h2>
-            <div className="flex border-b border-gray-600">
+            <div className="flex border-b border-gray-600 overflow-x-auto">
                 {prompts.map(p => (
                     <button
                         key={p.name}
@@ -105,7 +106,7 @@ const MetaPromptManager = () => {
                 ))}
             </div>
             <div className="mt-4">
-                {prompts.map(p => (
+                {prompts && prompts.map(p => (
                     <div key={p.name} className={activeTab === p.name ? 'block' : 'hidden'}>
                         <textarea
                             value={promptContent[p.name] || ''}
