@@ -93,22 +93,6 @@ def read_root():
         # Fallback to API message if static files not found
         return {"message": "Welcome to the MPLA API", "frontend": "not_found", "static_path": static_path}
 
-# Catch-all route for React Router (SPA routing)
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    """Serve React app for all non-API routes (SPA routing)."""
-    # Skip API routes
-    if full_path.startswith("api/"):
-        return {"error": "API endpoint not found"}
-    
-    static_path = os.path.join(os.path.dirname(__file__), "..", "static")
-    index_file = os.path.join(static_path, "index.html")
-    
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    else:
-        return {"message": "Frontend not available", "path": full_path}
-
 @app.post("/api/refine")
 async def refine_prompt_stream(request: Request, body: RefineRequest):
     """
@@ -208,4 +192,17 @@ async def metrics():
         "total_requests": 0,   # Placeholder - could use middleware to track
         "response_time_avg": "< 100ms",
         "error_rate": "0%"
-    } 
+    }
+
+# Catch-all route for React Router (SPA routing) - MUST BE LAST
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Serve React app for all non-API routes (SPA routing)."""
+    # This should not be reached for API routes since they're defined above
+    static_path = os.path.join(os.path.dirname(__file__), "..", "static")
+    index_file = os.path.join(static_path, "index.html")
+    
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    else:
+        return {"message": "Frontend not available", "path": full_path} 
