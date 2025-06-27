@@ -62,7 +62,24 @@ class RefineRequest(BaseModel):
 # Mount static files for the React frontend
 static_path = os.path.join(os.path.dirname(__file__), "..", "static")
 if os.path.exists(static_path):
-    app.mount("/static", StaticFiles(directory=static_path), name="static")
+    # First, mount the assets directory (critical for Vite builds)
+    assets_path = os.path.join(static_path, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+        print(f"INFO: Mounted assets directory: {assets_path}")
+    else:
+        print(f"WARNING: Assets directory not found: {assets_path}")
+    
+    # Mount vite.svg and favicon.ico at root
+    vite_svg_path = os.path.join(static_path, "vite.svg")
+    if os.path.exists(vite_svg_path):
+        @app.get("/vite.svg")  
+        async def serve_vite_svg():
+            return FileResponse(vite_svg_path)
+    
+    print(f"INFO: Static path configured: {static_path}")
+else:
+    print(f"ERROR: Static directory not found: {static_path}")
 
 @app.get("/")
 def read_root():
