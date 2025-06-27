@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import json
 import os
@@ -56,9 +58,39 @@ class RefineRequest(BaseModel):
 
 # --- API Endpoints ---
 
+# --- Static Files Configuration ---
+# Mount static files for the React frontend
+static_path = os.path.join(os.path.dirname(__file__), "..", "static")
+if os.path.exists(static_path):
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
+
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the MPLA API"}
+    """Serve the React frontend for the root route."""
+    static_path = os.path.join(os.path.dirname(__file__), "..", "static")
+    index_file = os.path.join(static_path, "index.html")
+    
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    else:
+        # Fallback to API message if static files not found
+        return {"message": "Welcome to the MPLA API", "frontend": "not_found", "static_path": static_path}
+
+# Catch-all route for React Router (SPA routing)
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Serve React app for all non-API routes (SPA routing)."""
+    # Skip API routes
+    if full_path.startswith("api/"):
+        return {"error": "API endpoint not found"}
+    
+    static_path = os.path.join(os.path.dirname(__file__), "..", "static")
+    index_file = os.path.join(static_path, "index.html")
+    
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    else:
+        return {"message": "Frontend not available", "path": full_path}
 
 @app.post("/api/refine")
 async def refine_prompt_stream(request: Request, body: RefineRequest):
