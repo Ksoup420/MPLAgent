@@ -42,8 +42,8 @@ WORKDIR /app
 
 # Create database directory and initialize database
 RUN mkdir -p /app/data
-# Copy the existing database file if it exists, or create an empty one
-COPY mpla_v2.db /app/ 2>/dev/null || touch /app/mpla_v2.db
+# Create an empty database file if it doesn't exist
+RUN touch /app/mpla_v2.db
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash mpla
