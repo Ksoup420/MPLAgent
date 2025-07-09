@@ -98,6 +98,7 @@ class MPLAgent:
     async def _self_correct_prompt(
         self,
         prompt_to_correct: str,
+        original_prompt_id: int,
         target_ai_profile: TargetAIProfile,
         max_correction_iterations: int,
         result_holder: Dict[str, Any],
@@ -120,7 +121,11 @@ class MPLAgent:
             }
 
             # 1. Test: Get a sample output from the current prompt version
-            temp_prompt_version = PromptVersion(prompt_text=current_prompt, version_number=0)
+            temp_prompt_version = PromptVersion(
+                prompt_text=current_prompt,
+                version_number=0,
+                original_prompt_id=original_prompt_id
+            )
             ai_output = await self.deployment_orchestrator.deploy_and_collect(
                 temp_prompt_version, target_ai_profile
             )
@@ -350,36 +355,29 @@ class MPLAgent:
                 continue
 
             # --- SELF-CORRECTION HOOK ---
-            final_prompt_text = enhanced_prompt_text
-            if (
-                self_correction_enabled_by_user
-                and self.output_analyzer
-                and self.prompt_reviser
-                and self.self_correction_config
-            ):
-                max_correction_iters = min(
-                    self.self_correction_config.max_iterations, self_correction_iterations_by_user
-                )
-                
-                result_holder = {}
+            if self_correction_enabled_by_user:
+                yield {"event": "message", "data": "Self-correction enabled. Analyzing and refining enhanced prompt..."}
+                correction_result_holder = {}
+                max_correction_iters = self.self_correction_config.get("iterations", 3) if self.self_correction_config else 3
+
                 correction_generator = self._self_correct_prompt(
                     prompt_to_correct=enhanced_prompt_text,
+                    original_prompt_id=original_prompt_obj.id,
                     target_ai_profile=target_ai_profile,
                     max_correction_iterations=max_correction_iters,
-                    result_holder=result_holder,
+                    result_holder=correction_result_holder,
                 )
 
-                # Yield all events from the self-correction process
-                async for event in correction_generator:
-                    yield event
+                async for correction_event in correction_generator:
+                    yield correction_event
                 
-                # Get the final result from the holder
-                final_prompt_text = result_holder.get("final_prompt", enhanced_prompt_text)
+                enhanced_prompt_text = correction_result_holder.get("final_prompt", enhanced_prompt_text)
+                yield {"event": "message", "data": f"Self-correction complete. Using refined prompt."}
 
             prompt_version_data = PromptVersion(
                 original_prompt_id=original_prompt_obj.id,
                 version_number=iteration_count,
-                prompt_text=final_prompt_text, # Use the potentially self-corrected prompt
+                prompt_text=enhanced_prompt_text, # Use the potentially self-corrected prompt
                 enhancement_rationale=rationale,
             )
             saved_prompt_version = await self.kb.add(prompt_version_data)

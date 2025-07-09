@@ -10,7 +10,7 @@ class BaseMPLAModel(SQLModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False, sa_column_kwargs={"onupdate": datetime.now}, description="Timestamp of last update.")
 
     class Config:
-        orm_mode = True # Allows easy mapping from SQLAlchemy models if used later
+        from_attributes = True # Allows easy mapping from SQLAlchemy models
         validate_assignment = True # Re-validate on attribute assignment
 
 class MetaPrompt(BaseMPLAModel, table=True):
@@ -61,7 +61,7 @@ class AIOutput(BaseMPLAModel, table=True):
     """Stores the output received from a target AI system for a given PromptVersion."""
     prompt_version_id: int = Field(foreign_key="promptversion.id", description="Foreign key to the PromptVersion that generated this output.")
     raw_output_data: Union[str, Dict[str, Any], List[Any]] = Field(sa_column=Column(JSON), description="The raw output from the AI (text, JSON, etc.).")
-    target_ai_profile_id: int = Field(foreign_key="targetaiprofile.id", description="Foreign key to the TargetAIProfile used for this output.")
+    target_ai_profile_id: Optional[int] = Field(foreign_key="targetaiprofile.id", description="Foreign key to the TargetAIProfile used for this output.")
     # error_message: Optional[str] = Field(default=None, description="Any error message if the AI call failed.")
 
     prompt_version: PromptVersion = Relationship(back_populates="ai_outputs")

@@ -95,7 +95,7 @@ if os.path.exists(static_path):
 else:
     print(f"ERROR: Static directory not found: {static_path}")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     """Serve the React frontend for the root route."""
     static_path = os.path.join(os.path.dirname(__file__), "..", "static")
@@ -314,14 +314,13 @@ async def metrics():
     }
 
 # Catch-all route for React Router (SPA routing) - MUST BE LAST
-@app.get("/{full_path:path}")
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
 async def serve_spa(full_path: str):
-    """Serve React app for all non-API routes (SPA routing)."""
-    # This should not be reached for API routes since they're defined above
+    """Serves the index.html for any path not otherwise caught, for SPA routing."""
     static_path = os.path.join(os.path.dirname(__file__), "..", "static")
     index_file = os.path.join(static_path, "index.html")
     
     if os.path.exists(index_file):
         return FileResponse(index_file)
     else:
-        return {"message": "Frontend not available", "path": full_path} 
+        raise HTTPException(status_code=404, detail="Frontend not found") 
