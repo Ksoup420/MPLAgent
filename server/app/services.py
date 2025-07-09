@@ -157,7 +157,7 @@ async def run_mpla_refinement(
         )
 
         target_ai_profile_data = {
-            "name": "gemini-1.5-flash",
+            "name": settings.get("model", "gemini-2.0-flash"),
             "capabilities": {
                 "temperature": settings.get("model_temperature", 0.7),
                 "architect_temperature": settings.get("architect_temperature", 0.2)
@@ -210,3 +210,159 @@ async def run_mpla_refinement(
         if agent and agent.deployment_orchestrator:
             await agent.deployment_orchestrator.close()
             logger.info("Deployment orchestrator resources released.") 
+
+@app.post("/api/prompt-testing/run")
+async def run_prompt_testing(request: dict):
+    """Run comprehensive prompt testing framework."""
+    try:
+        prompt_type = request.get("prompt_type", "architect")
+        model = request.get("model", "gemini-2.0-flash")
+        
+        logger.info(f"Starting prompt testing for {prompt_type} prompts using {model}")
+        
+        # Initialize components
+        kb = SQLiteKnowledgeBase(DB_PATH)
+        await kb.initialize()
+        
+        orchestrator = GoogleGeminiOrchestrator()
+        
+        ai_profile = TargetAIProfile(
+            name=model,
+            capabilities={"temperature": 0.2}
+        )
+        
+        # Import here to avoid circular imports
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../mpla_project"))
+        
+        from mpla.core.prompt_testing_framework import PromptTestingFramework
+        
+        testing_framework = PromptTestingFramework(
+            deployment_orchestrator=orchestrator,
+            knowledge_base=kb,
+            prompts_directory="Prompts for MPLA agents"
+        )
+        
+        # Run comprehensive test
+        report = await testing_framework.run_comprehensive_test(
+            prompt_type=prompt_type,
+            ai_profile=ai_profile
+        )
+        
+        # Convert report to dictionary for JSON response
+        result = {
+            "test_suite_name": report.test_suite_name,
+            "summary_metrics": report.summary_metrics,
+            "recommendations": report.recommendations,
+            "results": [
+                {
+                    "test_case_id": r.test_case_id,
+                    "prompt_variant_id": r.prompt_variant_id,
+                    "output": r.output[:500] + "..." if len(r.output) > 500 else r.output,  # Truncate long outputs
+                    "execution_time": r.execution_time,
+                    "success": r.success,
+                    "error_message": r.error_message,
+                    "quality_scores": r.quality_scores
+                }
+                for r in report.results
+            ],
+            "timestamp": report.timestamp.isoformat()
+        }
+        
+        # Save report to file
+        await testing_framework.save_report(report)
+        
+        await kb.close()
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error running prompt testing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/prompt-variants")
+async def get_prompt_variants():
+    """Get available prompt variants from the prompts directory."""
+    try:
+        prompts_dir = "Prompts for MPLA agents"
+        variants = []
+        
+        if os.path.exists(prompts_dir):
+            for filename in os.listdir(prompts_dir):
+                if filename.endswith(('.txt', '.md')):
+                    file_path = os.path.join(prompts_dir, filename)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        
+                        # Determine prompt type
+                        prompt_type = "architect"
+                        if "analyzer" in filename.lower() or "analysis" in filename.lower():
+                            prompt_type = "analyzer"
+                        elif "reviser" in filename.lower() or "revision" in filename.lower():
+                            prompt_type = "reviser"
+                        
+                        variants.append({
+                            "id": f"variant_{len(variants)}",
+                            "name": filename.replace('.txt', '').replace('.md', ''),
+                            "description": f"Prompt variant from {filename}",
+                            "prompt_type": prompt_type,
+                            "source_file": filename,
+                            "content_preview": content[:200] + "..." if len(content) > 200 else content
+                        })
+                    except Exception as e:
+                        logger.warning(f"Failed to read prompt file {filename}: {e}")
+        
+        return variants
+        
+    except Exception as e:
+        logger.error(f"Error getting prompt variants: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/prompt-testing/analyze-prompt")
+async def analyze_single_prompt(request: dict):
+    """Analyze a single prompt variant for quality and characteristics."""
+    try:
+        prompt_content = request.get("prompt_content", "")
+        prompt_type = request.get("prompt_type", "architect")
+        
+        if not prompt_content:
+            raise HTTPException(status_code=400, detail="Prompt content is required")
+        
+        # Simple analysis for now - can be enhanced with NLP
+        analysis = {
+            "length": len(prompt_content),
+            "word_count": len(prompt_content.split()),
+            "has_structure": bool(any(marker in prompt_content for marker in ['**', '#', '1.', '2.', '-'])),
+            "has_examples": "example" in prompt_content.lower(),
+            "has_role_definition": any(role in prompt_content.lower() for role in ["you are", "role:", "as a"]),
+            "has_output_format": any(fmt in prompt_content.lower() for fmt in ["output:", "format:", "structure:"]),
+            "complexity_score": min(len(prompt_content.split()) / 100, 1.0),  # Simple complexity metric
+            "estimated_quality": 0.5  # Placeholder - would use ML model in production
+        }
+        
+        # Generate suggestions
+        suggestions = []
+        if not analysis["has_role_definition"]:
+            suggestions.append("Consider adding a clear role definition (e.g., 'You are an expert...')")
+        if not analysis["has_structure"]:
+            suggestions.append("Add structural elements like headings or numbered steps")
+        if not analysis["has_output_format"]:
+            suggestions.append("Specify the desired output format explicitly")
+        if analysis["word_count"] < 50:
+            suggestions.append("Prompt may be too brief - consider adding more context")
+        if analysis["word_count"] > 500:
+            suggestions.append("Prompt may be too verbose - consider condensing key points")
+        
+        return {
+            "analysis": analysis,
+            "suggestions": suggestions,
+            "prompt_type": prompt_type
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing prompt: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 

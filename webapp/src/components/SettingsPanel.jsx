@@ -14,6 +14,27 @@ const SettingsPanel = ({ settings, setSettings }) => {
     }));
   };
 
+  // Get available models based on selected provider
+  const getAvailableModels = () => {
+    const provider = settings.providers.orchestrator;
+    if (provider === 'gemini') {
+      return [
+        { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+        { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+        { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+        { value: 'gemini-1.5-flash-8b', label: 'Gemini 1.5 Flash 8B' }
+      ];
+    } else if (provider === 'openai') {
+      return [
+        { value: 'gpt-4o', label: 'GPT-4o' },
+        { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+        { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
+      ];
+    }
+    return [];
+  };
+
   return (
     <div className="bg-gray-800 p-4 rounded-lg shadow-inner">
       <h2 className="text-xl font-bold mb-4 border-b border-gray-600 pb-2">Settings</h2>
@@ -125,6 +146,24 @@ const SettingsPanel = ({ settings, setSettings }) => {
           >
             <option value="gemini">Gemini</option>
             <option value="openai">OpenAI</option>
+          </select>
+        </div>
+
+        {/* Model Selection */}
+        <div className="flex flex-col">
+          <label htmlFor="model" className="mb-2 font-semibold text-gray-300">Model</label>
+          <select
+            id="model"
+            name="model"
+            value={settings.model}
+            onChange={handleInputChange}
+            className="bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            {getAvailableModels().map(model => (
+              <option key={model.value} value={model.value}>
+                {model.label}
+              </option>
+            ))}
           </select>
         </div>
         

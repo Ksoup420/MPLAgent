@@ -8,19 +8,21 @@ import MetaPromptManager from './components/MetaPromptManager';
 import KnowledgeBaseExplorer from './components/KnowledgeBaseExplorer';
 import StructuredPromptInput from './components/StructuredPromptInput';
 import AdvancedAnalytics from './components/AdvancedAnalytics';
+import PromptTestingInterface from './components/PromptTestingInterface';
 import { createParser } from 'eventsource-parser';
 import './index.css';
 
 function App() {
   const [settings, setSettings] = useState({
-    max_iterations: 3,
+    max_iterations: 1,
     model_temperature: 0.7,
     architect_temperature: 0.2,
     providers: {
       orchestrator: 'gemini',
       enhancer: 'architect',
     },
-    evaluation_mode: 'basic',
+    evaluation_mode: 'llm_assisted',
+    model: 'gemini-2.0-flash',
     enable_self_correction: false,
     self_correction_iterations: 3,
   });
@@ -34,6 +36,7 @@ function App() {
   const [showPromptManager, setShowPromptManager] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showPromptTesting, setShowPromptTesting] = useState(false);
 
   const handleRefine = async () => {
     setResults([]);
@@ -170,6 +173,18 @@ function App() {
                 <span>{showAnalytics ? '▼' : '▶'}</span>
               </button>
               {showAnalytics && <AdvancedAnalytics />}
+            </div>
+
+            {/* Prompt Testing Framework (Collapsible) */}
+            <div className="bg-gray-800 p-4 rounded-lg shadow-inner">
+              <button 
+                onClick={() => setShowPromptTesting(!showPromptTesting)}
+                className="w-full text-left font-bold text-lg flex justify-between items-center"
+              >
+                <span>🧪 Prompt Testing Framework</span>
+                <span>{showPromptTesting ? '▼' : '▶'}</span>
+              </button>
+              {showPromptTesting && <PromptTestingInterface />}
             </div>
           </div>
 
