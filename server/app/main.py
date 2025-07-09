@@ -1,3 +1,15 @@
+import sys
+import os
+
+# Add project root and mpla_project to path for MPLA imports - MUST BE FIRST
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+mpla_project_path = os.path.join(project_root, 'mpla_project')
+
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+if mpla_project_path not in sys.path:
+    sys.path.insert(0, mpla_project_path)
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -5,7 +17,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import json
-import os
 from dotenv import load_dotenv
 from fastapi.encoders import jsonable_encoder
 

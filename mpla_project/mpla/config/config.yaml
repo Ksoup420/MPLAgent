@@ -1,0 +1,35 @@
+agent:
+  deployment_orchestrator:
+    # provider can be 'gemini', 'openai', or 'mock'
+    provider: 'gemini' 
+
+  knowledge_base:
+    provider: 'sqlite'
+    db_path: 'mpla_v2.db'
+
+  prompt_enhancer:
+    provider: 'rule_based'
+
+  evaluation_engine:
+    provider: 'basic'
+
+  learning_refinement_module:
+    provider: 'rule_based'
+
+  reporting_module:
+    # provider can be 'mock' or 'database'
+    provider: 'database'
+
+  self_correction:
+    enabled: true
+    max_iterations: 3
+    # Temperature for the analysis model (should be low for consistency)
+    analysis_temperature: 0.0
+    # Temperature for the revision model (can be higher for creativity)
+    revision_temperature: 0.2
+
+
+# API keys should be loaded from environment variables for security
+api_keys:
+  google_api_key: ${GOOGLE_API_KEY}
+  openai_api_key: ${OPENAI_API_KEY} 

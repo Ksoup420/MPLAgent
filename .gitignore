@@ -1,0 +1,55 @@
+# Environments
+.env
+.venv
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+mpla.spec
+
+# Database
+mpla_v2.db
+
+# IDE / Editor specific
+.vscode/
+.idea/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+
+# Node
+webapp/node_modules/
+webapp/dist/
+.DS_Store
+
+# Session data
+Ai_Agents/session_summary.json
+
+# Log files
+*.log
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Production artifacts
+/data/
+/logs/
+docker-compose.override.yml
+
+# Deployment
+.endgame-cache/
+deployment-*.log

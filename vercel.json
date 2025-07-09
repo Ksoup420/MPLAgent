@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server/start.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "webapp/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/server/start.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/webapp/dist/$1"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "8080"
+  },
+  "functions": {
+    "server/start.js": {
+      "maxDuration": 30
+    }
+  }
+} 

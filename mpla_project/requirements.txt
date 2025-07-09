@@ -1,0 +1,30 @@
+# For loading environment variables
+python-dotenv
+
+# Google Gemini API
+google-generativeai
+
+# For CLI
+typer[all]
+
+# For data validation
+pydantic
+
+# OpenAI API
+openai
+
+# For database
+aiosqlite
+
+# For async http requests in openai
+httpx
+
+# For loading YAML configuration
+PyYAML
+
+# For testing
+pytest
+pytest-asyncio
+loguru
+pyinstaller
+rich 

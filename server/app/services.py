@@ -6,10 +6,14 @@ from typing import AsyncGenerator, Dict, Any
 from fastapi.encoders import jsonable_encoder
 from fastapi import HTTPException
 
-# Add project root to Python path
+# Add project root and mpla_project to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+mpla_project_path = os.path.join(project_root, 'mpla_project')
+
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+if mpla_project_path not in sys.path:
+    sys.path.insert(0, mpla_project_path)
 
 # MPLA imports
 from mpla.utils.logging import setup_logging, logger

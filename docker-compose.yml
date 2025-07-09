@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  mpla-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ENVIRONMENT=development
+    volumes:
+      # Mount the database directory for persistence
+      - ./data:/app/data
+      # Mount logs directory
+      - ./logs:/app/logs
+    depends_on:
+      - mpla-db
+    networks:
+      - mpla-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  mpla-db:
+    image: alpine:latest
+    command: ["tail", "-f", "/dev/null"]  # Placeholder for SQLite (file-based)
+    volumes:
+      - ./data:/data
+    networks:
+      - mpla-network
+
+  # Optional: Add a reverse proxy for production-like setup
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - mpla-app
+    networks:
+      - mpla-network
+    profiles:
+      - production
+
+volumes:
+  mpla-data:
+    driver: local
+  mpla-logs:
+    driver: local
+
+networks:
+  mpla-network:
+    driver: bridge 

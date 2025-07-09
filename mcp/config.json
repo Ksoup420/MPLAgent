@@ -1,0 +1,42 @@
+{
+  "mcpServers": {
+    "mpla-server": {
+      "command": "node",
+      "args": ["mcp/server.js"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+        "MPLA_API_URL": "http://localhost:8080"
+      }
+    }
+  },
+  "tools": {
+    "mpla_run_refinement": {
+      "server": "mpla-server",
+      "description": "Execute MPLA prompt refinement with real-time streaming"
+    },
+    "mpla_get_session_report": {
+      "server": "mpla-server",
+      "description": "Retrieve detailed session analytics and performance metrics"
+    },
+    "mpla_database_query": {
+      "server": "mpla-server",
+      "description": "Query historical MPLA data for insights and trends"
+    },
+    "github_create_issue": {
+      "server": "mpla-server",
+      "description": "Create GitHub issues with MPLA findings and recommendations"
+    },
+    "github_get_repository": {
+      "server": "mpla-server",
+      "description": "Analyze GitHub repositories for prompt engineering opportunities"
+    },
+    "github_search_code": {
+      "server": "mpla-server",
+      "description": "Search GitHub code for prompt engineering patterns and examples"
+    },
+    "mpla_health_check": {
+      "server": "mpla-server",
+      "description": "Check MPLA system health and component status"
+    }
+  }
+} 
