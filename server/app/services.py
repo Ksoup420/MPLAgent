@@ -4,7 +4,7 @@ import os
 import sys
 from typing import AsyncGenerator, Dict, Any
 from fastapi.encoders import jsonable_encoder
-from fastapi import HTTPException
+from fastapi import HTTPException, APIRouter
 
 # Add project root and mpla_project to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -33,6 +33,8 @@ setup_logging()
 # --- Service Setup ---
 # This setup should be more robust in a production environment (e.g., using dependency injection)
 # For now, we instantiate the components directly.
+
+router = APIRouter()
 
 # Knowledge Base - Use absolute path to database file in project root
 DATABASE_URL = os.path.join(project_root, "mpla_v2.db")
@@ -211,7 +213,7 @@ async def run_mpla_refinement(
             await agent.deployment_orchestrator.close()
             logger.info("Deployment orchestrator resources released.") 
 
-@app.post("/api/prompt-testing/run")
+@router.post("/api/prompt-testing/run")
 async def run_prompt_testing(request: dict):
     """Run comprehensive prompt testing framework."""
     try:
@@ -282,7 +284,7 @@ async def run_prompt_testing(request: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/prompt-variants")
+@router.get("/api/prompt-variants")
 async def get_prompt_variants():
     """Get available prompt variants from the prompts directory."""
     try:
@@ -315,14 +317,14 @@ async def get_prompt_variants():
                     except Exception as e:
                         logger.warning(f"Failed to read prompt file {filename}: {e}")
         
-        return variants
+        return {"variants": variants}
         
     except Exception as e:
         logger.error(f"Error getting prompt variants: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/prompt-testing/analyze-prompt")
+@router.post("/api/prompt-testing/analyze-prompt")
 async def analyze_single_prompt(request: dict):
     """Analyze a single prompt variant for quality and characteristics."""
     try:

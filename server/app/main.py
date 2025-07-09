@@ -45,11 +45,14 @@ app = FastAPI(
 # Allow requests from the frontend development server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # The default Vite dev server port
+    allow_origins=["http://localhost:5173", "http://localhost:8080", "https://mplagent.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routes from services
+app.include_router(services.router)
 
 # --- Pydantic Models for API requests and responses ---
 
